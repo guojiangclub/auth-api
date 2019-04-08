@@ -79,10 +79,17 @@ class MiniProgramLoginController extends Controller
 
         //1. openid 不存在相关用户和记录，直接返回 openid
         if (!$userBind = $this->userBindRepository->getByOpenId($openid)) {
+
             $userBind = $this->userBindRepository->create(['open_id' => $openid, 'type' => 'miniprogram',
-                'app_id' => $this->getMiniprogramAppId(), ]);
+                'app_id' => $this->getMiniprogramAppId(), 'unionid' => isset($result['unionid']) ?? '']);
 
             return $this->success(['open_id' => $openid]);
+        }
+
+        //2. update unionid
+        if($userBind && isset($result['unionid'])){
+            $userBind->unionid = $result['unionid'];
+            $userBind->save();
         }
 
         //2. openid 不存在相关用户，直接返回 openid
@@ -94,6 +101,8 @@ class MiniProgramLoginController extends Controller
         $user = $this->userRepository->find($userBind->user_id);
 
         $token = $user->createToken($user->id)->accessToken;
+
+        event('user.login', [$user]);
 
         return $this->success(['token_type' => 'Bearer', 'access_token' => $token]);
     }
@@ -132,17 +141,25 @@ class MiniProgramLoginController extends Controller
 
         $mobile = $decryptedData['purePhoneNumber'];
 
+        $isNewUser = false;
+
         //3. get or create user.
         if (!$user = $this->userRepository->getUserByCredentials(['mobile' => $mobile])) {
             $data = ['mobile' => $mobile];
             $user = $this->userRepository->create($data);
+            $isNewUser = true;
         }
 
         $token = $user->createToken($user->id)->accessToken;
 
         $this->userService->bindPlatform($user->id, request('open_id'), $this->getMiniprogramAppId(), 'miniprogram');
 
-        return $this->success(['token_type' => 'Bearer', 'access_token' => $token]);
+        //4. update unionid.
+
+
+        event('user.login', [$user]);
+
+        return $this->success(['token_type' => 'Bearer', 'access_token' => $token, 'is_new_user' => $isNewUser]);
     }
 
     /**
@@ -180,13 +197,13 @@ class MiniProgramLoginController extends Controller
     {
         $app = request('app') ?? 'default';
 
-        if (!config('ibrand.wechat.mini_program.'.$app.'.app_id') or !config('ibrand.wechat.mini_program.'.$app.'.secret')) {
+        if (!config('ibrand.wechat.mini_program.' . $app . '.app_id') or !config('ibrand.wechat.mini_program.' . $app . '.secret')) {
             throw new Exception('please set wechat miniprogram account.');
         }
 
         $options = [
-            'app_id' => config('ibrand.wechat.mini_program.'.$app.'.app_id'),
-            'secret' => config('ibrand.wechat.mini_program.'.$app.'.secret'),
+            'app_id' => config('ibrand.wechat.mini_program.' . $app . '.app_id'),
+            'secret' => config('ibrand.wechat.mini_program.' . $app . '.secret'),
         ];
 
         $miniProgram = Factory::miniProgram($options);
@@ -201,6 +218,6 @@ class MiniProgramLoginController extends Controller
     {
         $app = request('app') ?? 'default';
 
-        return config('ibrand.wechat.mini_program.'.$app.'.app_id');
+        return config('ibrand.wechat.mini_program.' . $app . '.app_id');
     }
 }

@@ -45,7 +45,7 @@ class ApiServiceProvider extends ServiceProvider
      */
     protected function mapApiRoutes()
     {
-        Route::prefix('api')
+        Route::prefix(api_prefix())
             ->middleware(['api', 'cors'])
             ->namespace($this->namespace)
             ->group(__DIR__.'/route.php');
