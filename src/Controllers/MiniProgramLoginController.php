@@ -71,6 +71,9 @@ class MiniProgramLoginController extends Controller
 
         $result = $miniProgram->auth->session($code);
 
+        \Log::info('小程序快速登陆');
+        \Log::info($result);
+
         if (!isset($result['openid'])) {
             return $this->failed('获取openid失败.');
         }
@@ -81,13 +84,13 @@ class MiniProgramLoginController extends Controller
         if (!$userBind = $this->userBindRepository->getByOpenId($openid)) {
 
             $userBind = $this->userBindRepository->create(['open_id' => $openid, 'type' => 'miniprogram',
-                'app_id' => $this->getMiniprogramAppId(), 'unionid' => isset($result['unionid']) ?? '']);
+                'app_id' => $this->getMiniprogramAppId(), 'unionid' => isset($result['unionid']) ? $result['unionid'] : '']);
 
             return $this->success(['open_id' => $openid]);
         }
 
         //2. update unionid
-        if($userBind && isset($result['unionid'])){
+        if ($userBind && isset($result['unionid'])) {
             $userBind->unionid = $result['unionid'];
             $userBind->save();
         }
@@ -122,6 +125,9 @@ class MiniProgramLoginController extends Controller
 
         $result = $miniProgram->auth->session($code);
 
+        \Log::info('小程序手机登陆授权code');
+        \Log::info($result);
+
         if (!isset($result['session_key'])) {
             return $this->failed('获取 session_key 失败.');
         }
@@ -134,6 +140,9 @@ class MiniProgramLoginController extends Controller
         $iv = request('iv');
 
         $decryptedData = $miniProgram->encryptor->decryptData($sessionKey, $iv, $encryptedData);
+
+        \Log::info('小程序手机登陆解密数据');
+        \Log::info($decryptedData);
 
         if (!isset($decryptedData['purePhoneNumber'])) {
             return $this->failed('获取手机号失败.');
@@ -187,6 +196,7 @@ class MiniProgramLoginController extends Controller
 
         return $this->success(compact('openid'));
     }
+
 
     /**
      * @return EasyWeChat\MiniProgram\Application

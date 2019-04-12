@@ -11,11 +11,11 @@
 
 Route::post('oauth/sms', 'AuthController@smsLogin')->name('api.oauth.sms');
 
-Route::get('oauth/getRedirectUrl', 'OfficialAccountAuthController@getRedirectUrl');
-Route::post('oauth/quicklogin', 'OfficialAccountAuthController@quickLogin');
+Route::get('oauth/official-account/get-redirect-url', 'OfficialAccountAuthController@getRedirectUrl');
+Route::post('oauth/official-account/quick-login', 'OfficialAccountAuthController@quickLogin');
+Route::post('oauth/official-account/quick-user-login', 'OfficialAccountAuthController@quickUserLogin');
+Route::post('oauth/official-account/update-user', 'OfficialAccountAuthController@updateUser');
 
-Route::get('oauth/getUser', 'OfficialAccountAuthController@getUser');
-
-Route::post('oauth/MiniProgramLogin', 'MiniProgramLoginController@login')->name('api.oauth.miniprogram.login');
-Route::post('oauth/MiniProgramMobileLogin', 'MiniProgramLoginController@mobileLogin')->name('api.oauth.miniprogram.mobile.login');
+Route::post('oauth/miniprogram/login', 'MiniProgramLoginController@login')->name('api.oauth.miniprogram.login');
+Route::post('oauth/miniprogram/mobile', 'MiniProgramLoginController@mobileLogin')->name('api.oauth.miniprogram.mobile.login');
 Route::post('oauth/miniprogram/openid', 'MiniProgramLoginController@getOpenIdByCode');

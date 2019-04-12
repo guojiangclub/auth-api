@@ -58,6 +58,8 @@ class AuthController extends Controller
     {
         $mobile = request('mobile');
         $code = request('code');
+        $environment = request('environment') ?? 'official_account';
+        $app = request('app') ?? 'default';
 
         if (!Sms::checkCode($mobile, $code)) {
             return $this->failed('验证码错误');
@@ -79,21 +81,43 @@ class AuthController extends Controller
         $token = $user->createToken($mobile)->accessToken;
 
         if (!empty(request('open_id'))) {
+
             //bind user bind data to user.
             $userBind = $this->userBindRepository->getByOpenId(request('open_id'));
 
-            $this->userService->bindPlatform($user->id, request('open_id'), config('wechat.mini_program.default.app_id'), $userBind->type);
+            $this->userService->bindPlatform($user->id, request('open_id'), get_wechat_config($app, $environment)['app_id'], $userBind->type);
 
             //if wechat bind user data.
             if ('wechat' == $userBind->type) {
-                $wechatUser = platform_application()->getUser(config('ibrand.wechat.official_account.default.app_id'), request('open_id'));
 
+                //get wechat data.
+                $wechatUser = platform_application()->getUser(get_wechat_config($app, $environment)['app_id'], request('open_id'));
+
+                //update user bind data.
+                $this->userBindRepository->update(
+                    ['nick_name' => $wechatUser['nickname']
+                        , 'sex' => $wechatUser['sex']
+                        , 'avatar' => $wechatUser['headimgurl']
+                        , 'city' => $wechatUser['city']],
+                    $userBind->id
+                );
+
+                //update user.
                 $this->userRepository->update(
-                    ['nick_name' => $wechatUser['nickname'], 'sex' => 1 == $wechatUser['sex'] ? '男' : '女', 'avatar' => $wechatUser['headimgurl'], 'city' => $wechatUser['city'],
+                    [
+                        'nick_name' => $wechatUser['nickname']
+                        , 'sex' => 1 == $wechatUser['sex'] ? '男' : '女'
+                        , 'avatar' => $wechatUser['headimgurl']
+                        , 'city' => $wechatUser['city'],
                     ],
                     $user->id);
+
+                //除非更新了微信头像的事件，方便把图片保存到本地，避免导致用户更新头像后，导致头像不显示的问题
+                event('user.update.wechat.avatar', [$user, $wechatUser['headimgurl']]);
             }
         }
+
+        event('user.login', [$user]);
 
         return $this->success(['token_type' => 'Bearer', 'access_token' => $token, 'is_new_user' => $is_new]);
     }
