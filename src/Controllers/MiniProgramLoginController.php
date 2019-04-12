@@ -55,6 +55,8 @@ class MiniProgramLoginController extends Controller
     }
 
     /**
+     * 小程序快速登陆，通过 code 换取 openid，如果 openid 绑定了用户则直接登陆，否则返回 openid 给前端
+     *
      * @return \Illuminate\Http\Response|mixed
      * @throws EasyWeChat\Kernel\Exceptions\InvalidConfigException
      * @throws Exception
@@ -71,16 +73,24 @@ class MiniProgramLoginController extends Controller
 
         $result = $miniProgram->auth->session($code);
 
-        \Log::info('小程序快速登陆');
-        \Log::info($result);
-
         if (!isset($result['openid'])) {
             return $this->failed('获取openid失败.');
         }
 
         $openid = $result['openid'];
 
-        //1. openid 不存在相关用户和记录，直接返回 openid
+        //1. unionid 先判断 unionid 是否存在关联用户，如果存在直接返回 token
+        if (isset($result['unionid']) && $user = $this->getUserByUnionid($result['unionid'])) {
+
+            $token = $user->createToken($user->id)->accessToken;
+
+            event('user.login', [$user]);
+
+            return $this->success(['token_type' => 'Bearer', 'access_token' => $token]);
+        }
+
+
+        //2. openid 不存在相关用户和记录，直接返回 openid
         if (!$userBind = $this->userBindRepository->getByOpenId($openid)) {
 
             $userBind = $this->userBindRepository->create(['open_id' => $openid, 'type' => 'miniprogram',
@@ -90,7 +100,7 @@ class MiniProgramLoginController extends Controller
         }
 
         //2. update unionid
-        if ($userBind && isset($result['unionid'])) {
+        if ($userBind && isset($result['unionid']) && empty($userBind->unionid)) {
             $userBind->unionid = $result['unionid'];
             $userBind->save();
         }
@@ -125,9 +135,6 @@ class MiniProgramLoginController extends Controller
 
         $result = $miniProgram->auth->session($code);
 
-        \Log::info('小程序手机登陆授权code');
-        \Log::info($result);
-
         if (!isset($result['session_key'])) {
             return $this->failed('获取 session_key 失败.');
         }
@@ -141,8 +148,6 @@ class MiniProgramLoginController extends Controller
 
         $decryptedData = $miniProgram->encryptor->decryptData($sessionKey, $iv, $encryptedData);
 
-        \Log::info('小程序手机登陆解密数据');
-        \Log::info($decryptedData);
 
         if (!isset($decryptedData['purePhoneNumber'])) {
             return $this->failed('获取手机号失败.');
@@ -163,15 +168,14 @@ class MiniProgramLoginController extends Controller
 
         $this->userService->bindPlatform($user->id, request('open_id'), $this->getMiniprogramAppId(), 'miniprogram');
 
-        //4. update unionid.
-
-
         event('user.login', [$user]);
 
         return $this->success(['token_type' => 'Bearer', 'access_token' => $token, 'is_new_user' => $isNewUser]);
     }
 
     /**
+     * 此方法只使用与支付时，需要根据 code 换取 openid
+     *
      * @return \Illuminate\Http\Response|mixed
      * @throws EasyWeChat\Kernel\Exceptions\InvalidConfigException
      * @throws Exception

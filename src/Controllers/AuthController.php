@@ -77,6 +77,7 @@ class AuthController extends Controller
             return $this->failed('您的账号已被禁用，联系网站管理员或客服！');
         }
 
+        dd(get_class($user));
         //1. create user token.
         $token = $user->createToken($mobile)->accessToken;
 

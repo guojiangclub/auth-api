@@ -11,6 +11,8 @@
 
 namespace iBrand\Auth\Api\Controllers;
 
+use iBrand\Component\User\Repository\UserBindRepository;
+use iBrand\Component\User\Repository\UserRepository;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller as BaseController;
 
@@ -22,8 +24,8 @@ abstract class Controller extends BaseController
 {
     /**
      * @param array $data
-     * @param int   $code
-     * @param bool  $status
+     * @param int $code
+     * @param bool $status
      *
      * @return Response
      */
@@ -34,7 +36,7 @@ abstract class Controller extends BaseController
 
     /**
      * @param      $message
-     * @param int  $code
+     * @param int $code
      * @param bool $status
      *
      * @return mixed
@@ -43,5 +45,27 @@ abstract class Controller extends BaseController
     {
         return new Response(['status' => $status, 'code' => $code, 'message' => $message]
         );
+    }
+
+
+    /**
+     * get user model by unionid.
+     * @param $unionid
+     * @return |null
+     */
+    protected function getUserByUnionid($unionid)
+    {
+        $binds = app(UserBindRepository::class)->getByUnionId($unionid);
+
+        $user = null;
+
+        $binds->each(function ($item, $key) use ($user) {
+            if (!$item->user_id) {
+                $user = app(UserRepository::class)->find($item->user_id);
+            }
+        });
+
+        return $user;
+
     }
 }
