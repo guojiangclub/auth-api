@@ -168,7 +168,7 @@ class MiniProgramLoginController extends Controller
 
         $this->userService->bindPlatform($user->id, request('open_id'), $this->getMiniprogramAppId(), 'miniprogram');
 
-        event('user.login', [$user]);
+        event('user.login', [$user,$isNewUser]);
 
         return $this->success(['token_type' => 'Bearer', 'access_token' => $token, 'is_new_user' => $isNewUser]);
     }
