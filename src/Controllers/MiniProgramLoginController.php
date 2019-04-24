@@ -82,6 +82,9 @@ class MiniProgramLoginController extends Controller
         //1. unionid 先判断 unionid 是否存在关联用户，如果存在直接返回 token
         if (isset($result['unionid']) && $user = $this->getUserByUnionid($result['unionid'])) {
 
+            //根据 unionid 找到 user_id 为空的设置好 user_id
+            $this->userBindRepository->updateUserIdByUnionId($result['unionid'],$user->id);
+
             $token = $user->createToken($user->id)->accessToken;
 
             event('user.login', [$user]);
