@@ -1,45 +1,45 @@
 {
-  "name": "ibrand/auth-api",
-  "type": "library",
-  "description": "iBrand auth api.",
-  "keywords": [
-    "iBrand",
-    "auth",
-    "api"
-  ],
-  "license": "MIT",
-  "authors": [
-    {
-      "name": "shjchen",
-      "email": "chenhao@ibrand.cc"
-    }
-  ],
-  "require": {
-    "php": ">=7.0",
-    "barryvdh/laravel-cors": "^0.11.2",
-    "ibrand/laravel-sms": "~1.0",
-    "ibrand/user": "~1.0"
-  },
-  "require-dev": {
-    "phpunit/phpunit": "~6.0",
-    "orchestra/testbench": "~3.5",
-    "orchestra/database": "~3.5"
-  },
-  "autoload": {
-    "psr-4": {
-      "iBrand\\Auth\\Api\\": "src"
-    }
-  },
-  "autoload-dev": {
-    "psr-4": {
-    }
-  },
-  "extra": {
-    "laravel": {
-      "providers": [
-      ]
-    }
-  },
-  "minimum-stability": "dev",
-  "prefer-stable": true
+	"name": "ibrand/auth-api",
+	"type": "library",
+	"description": "iBrand auth api.",
+	"keywords": [
+		"iBrand",
+		"auth",
+		"api"
+	],
+	"license": "MIT",
+	"authors": [
+		{
+			"name": "shjchen",
+			"email": "chenhao@ibrand.cc"
+		}
+	],
+	"require": {
+		"php": ">=7.0",
+		"barryvdh/laravel-cors": "^0.11.2",
+		"ibrand/laravel-sms": "~1.0",
+		"ibrand/user": "~1.0"
+	},
+	"require-dev": {
+		"phpunit/phpunit": "~6.0",
+		"orchestra/testbench": "~3.5",
+		"orchestra/database": "~3.5"
+	},
+	"autoload": {
+		"psr-4": {
+			"iBrand\\Auth\\Api\\": "src"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+		}
+	},
+	"extra": {
+		"laravel": {
+			"providers": [
+			]
+		}
+	},
+	"minimum-stability": "dev",
+	"prefer-stable": true
 }

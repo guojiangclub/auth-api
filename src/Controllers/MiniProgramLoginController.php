@@ -17,224 +17,279 @@ use iBrand\Common\Wechat\Factory;
 use iBrand\Component\User\Repository\UserBindRepository;
 use iBrand\Component\User\Repository\UserRepository;
 use iBrand\Component\User\UserService;
+use Illuminate\Http\Request;
+use Validator;
 
 /**
  * Class MiniProgramLoginController
+ *
  * @package iBrand\Auth\Api\Controllers
  */
 class MiniProgramLoginController extends Controller
 {
-    /**
-     * @var UserRepository
-     */
-    protected $userRepository;
-    /**
-     * @var UserBindRepository
-     */
-    protected $userBindRepository;
-    /**
-     * @var UserService
-     */
-    protected $userService;
-    /**
-     * @var
-     */
-    protected $miniProgramService;
+	/**
+	 * @var UserRepository
+	 */
+	protected $userRepository;
+	/**
+	 * @var UserBindRepository
+	 */
+	protected $userBindRepository;
+	/**
+	 * @var UserService
+	 */
+	protected $userService;
+	/**
+	 * @var
+	 */
+	protected $miniProgramService;
 
-    /**
-     * MiniProgramLoginController constructor.
-     * @param UserRepository $userRepository
-     * @param UserBindRepository $userBindRepository
-     * @param UserService $userService
-     */
-    public function __construct(UserRepository $userRepository, UserBindRepository $userBindRepository, UserService $userService)
-    {
-        $this->userRepository = $userRepository;
-        $this->userBindRepository = $userBindRepository;
-        $this->userService = $userService;
-    }
+	/**
+	 * MiniProgramLoginController constructor.
+	 *
+	 * @param UserRepository     $userRepository
+	 * @param UserBindRepository $userBindRepository
+	 * @param UserService        $userService
+	 */
+	public function __construct(UserRepository $userRepository, UserBindRepository $userBindRepository, UserService $userService)
+	{
+		$this->userRepository     = $userRepository;
+		$this->userBindRepository = $userBindRepository;
+		$this->userService        = $userService;
+	}
 
-    /**
-     * 小程序快速登陆，通过 code 换取 openid，如果 openid 绑定了用户则直接登陆，否则返回 openid 给前端
-     *
-     * @return \Illuminate\Http\Response|mixed
-     * @throws EasyWeChat\Kernel\Exceptions\InvalidConfigException
-     * @throws Exception
-     */
-    public function login()
-    {
-        $code = request('code');
+	/**
+	 * 小程序快速登陆，通过 code 换取 openid，如果 openid 绑定了用户则直接登陆，否则返回 openid 给前端
+	 *
+	 * @return \Illuminate\Http\Response|mixed
+	 * @throws EasyWeChat\Kernel\Exceptions\InvalidConfigException
+	 * @throws Exception
+	 */
+	public function login()
+	{
+		$code = request('code');
 
-        if (empty($code)) {
-            return $this->failed('missing code parameters.');
-        }
+		if (empty($code)) {
+			return $this->failed('missing code parameters.');
+		}
 
-        $miniProgram = $this->getMiniprogramApp();
+		$miniProgram = $this->getMiniprogramApp();
 
-        $result = $miniProgram->auth->session($code);
+		$result = $miniProgram->auth->session($code);
 
-        if (!isset($result['openid'])) {
-            return $this->failed('获取openid失败.');
-        }
+		if (!isset($result['openid'])) {
+			return $this->failed('获取openid失败.');
+		}
 
-        $openid = $result['openid'];
+		$openid = $result['openid'];
 
-        //1. unionid 先判断 unionid 是否存在关联用户，如果存在直接返回 token
-        if (isset($result['unionid']) && $user = $this->getUserByUnionid($result['unionid'])) {
+		//1. unionid 先判断 unionid 是否存在关联用户，如果存在直接返回 token
+		if (isset($result['unionid']) && $user = $this->getUserByUnionid($result['unionid'])) {
 
-            //根据 unionid 找到 user_id 为空的设置好 user_id
-            $this->userBindRepository->updateUserIdByUnionId($result['unionid'],$user->id);
+			//根据 unionid 找到 user_id 为空的设置好 user_id
+			$this->userBindRepository->updateUserIdByUnionId($result['unionid'], $user->id);
 
-            $token = $user->createToken($user->id)->accessToken;
+			$token = $user->createToken($user->id)->accessToken;
 
-            event('user.login', [$user]);
+			event('user.login', [$user]);
 
-            return $this->success(['token_type' => 'Bearer', 'access_token' => $token]);
-        }
+			return $this->success(['token_type' => 'Bearer', 'access_token' => $token]);
+		}
 
+		//2. openid 不存在相关用户和记录，直接返回 openid
+		if (!$userBind = $this->userBindRepository->getByOpenId($openid)) {
 
-        //2. openid 不存在相关用户和记录，直接返回 openid
-        if (!$userBind = $this->userBindRepository->getByOpenId($openid)) {
+			$userBind = $this->userBindRepository->create(['open_id' => $openid, 'type' => 'miniprogram', 'app_id' => $this->getMiniprogramAppId(), 'unionid' => isset($result['unionid']) ? $result['unionid'] : '']);
 
-            $userBind = $this->userBindRepository->create(['open_id' => $openid, 'type' => 'miniprogram',
-                'app_id' => $this->getMiniprogramAppId(), 'unionid' => isset($result['unionid']) ? $result['unionid'] : '']);
+			return $this->success(['open_id' => $openid]);
+		}
 
-            return $this->success(['open_id' => $openid]);
-        }
+		//2. update unionid
+		if ($userBind && isset($result['unionid']) && empty($userBind->unionid)) {
+			$userBind->unionid = $result['unionid'];
+			$userBind->save();
+		}
 
-        //2. update unionid
-        if ($userBind && isset($result['unionid']) && empty($userBind->unionid)) {
-            $userBind->unionid = $result['unionid'];
-            $userBind->save();
-        }
+		//2. openid 不存在相关用户，直接返回 openid
+		if (!$userBind->user_id) {
+			return $this->success(['open_id' => $openid]);
+		}
 
-        //2. openid 不存在相关用户，直接返回 openid
-        if (!$userBind->user_id) {
-            return $this->success(['open_id' => $openid]);
-        }
+		//3. 绑定了用户,直接返回 token
+		$user = $this->userRepository->find($userBind->user_id);
 
-        //3. 绑定了用户,直接返回 token
-        $user = $this->userRepository->find($userBind->user_id);
+		$token = $user->createToken($user->id)->accessToken;
 
-        $token = $user->createToken($user->id)->accessToken;
+		event('user.login', [$user]);
 
-        event('user.login', [$user]);
+		return $this->success(['token_type' => 'Bearer', 'access_token' => $token]);
+	}
 
-        return $this->success(['token_type' => 'Bearer', 'access_token' => $token]);
-    }
+	public function userLogin(Request $request)
+	{
+		$input      = $request->all();
+		$rules      = [
+			'openid'     => 'required',
+			'avatar'     => 'required',
+			'nick_name'  => 'required',
+			'agent_code' => 'required',
+		];
+		$message    = [
+			"required" => ":attribute 不能为空",
+		];
+		$attributes = [
+			'openid'     => '用户openid',
+			'avatar'     => '用户头像',
+			'nick_name'  => '用户昵称',
+			'agent_code' => '关联分销商编码',
+		];
 
-    /**
-     * @return \Illuminate\Http\Response|mixed
-     * @throws EasyWeChat\Kernel\Exceptions\DecryptException
-     * @throws EasyWeChat\Kernel\Exceptions\InvalidConfigException
-     * @throws Exception
-     */
-    public function mobileLogin()
-    {
-        //1. get session key.
-        $code = request('code');
+		$validator = Validator::make($input, $rules, $message, $attributes);
+		if ($validator->fails()) {
 
-        $miniProgram = $this->getMiniprogramApp();
+			return $this->failed($validator->messages()->first());
+		}
 
-        $result = $miniProgram->auth->session($code);
+		$userBind = $this->userBindRepository->getByOpenId($input['openid']);
+		if (!$userBind) {
+			$userBind = $this->userBindRepository->create([
+				'open_id'   => $input['openid'],
+				'type'      => 'miniprogram',
+				'app_id'    => $this->getMiniprogramAppId(),
+				'avatar'    => $input['avatar'],
+				'nick_name' => $input['nick_name'],
+			]);
+		}
 
-        if (!isset($result['session_key'])) {
-            return $this->failed('获取 session_key 失败.');
-        }
+		if (!$userBind->user_id) {
+			$user = $this->userRepository->create([
+				'nick_name' => $input['nick_name'],
+				'avatar'    => $input['avatar'],
+			]);
 
-        $sessionKey = $result['session_key'];
+			$userBind->user_id = $user->id;
+			$userBind->save();
+		} else {
+			$user = $this->userRepository->find($userBind->user_id);
+		}
 
-        //2. get phone number.
-        $encryptedData = request('encryptedData');
+		$token = $user->createToken($user->id)->accessToken;
 
-        $iv = request('iv');
+		event('user.login', [$user]);
 
-        $decryptedData = $miniProgram->encryptor->decryptData($sessionKey, $iv, $encryptedData);
+		return $this->success(['token_type' => 'Bearer', 'access_token' => $token]);
+	}
 
+	/**
+	 * @return \Illuminate\Http\Response|mixed
+	 * @throws EasyWeChat\Kernel\Exceptions\DecryptException
+	 * @throws EasyWeChat\Kernel\Exceptions\InvalidConfigException
+	 * @throws Exception
+	 */
+	public function mobileLogin()
+	{
+		//1. get session key.
+		$code = request('code');
 
-        if (!isset($decryptedData['purePhoneNumber'])) {
-            return $this->failed('获取手机号失败.');
-        }
+		$miniProgram = $this->getMiniprogramApp();
 
-        $mobile = $decryptedData['purePhoneNumber'];
+		$result = $miniProgram->auth->session($code);
 
-        $isNewUser = false;
+		if (!isset($result['session_key'])) {
+			return $this->failed('获取 session_key 失败.');
+		}
 
-        //3. get or create user.
-        if (!$user = $this->userRepository->getUserByCredentials(['mobile' => $mobile])) {
-            $data = ['mobile' => $mobile];
-            $user = $this->userRepository->create($data);
-            $isNewUser = true;
-        }
+		$sessionKey = $result['session_key'];
 
-        $token = $user->createToken($user->id)->accessToken;
+		//2. get phone number.
+		$encryptedData = request('encryptedData');
 
-        $this->userService->bindPlatform($user->id, request('open_id'), $this->getMiniprogramAppId(), 'miniprogram');
+		$iv = request('iv');
 
-        event('user.login', [$user,$isNewUser]);
+		$decryptedData = $miniProgram->encryptor->decryptData($sessionKey, $iv, $encryptedData);
 
-        return $this->success(['token_type' => 'Bearer', 'access_token' => $token, 'is_new_user' => $isNewUser]);
-    }
+		if (!isset($decryptedData['purePhoneNumber'])) {
+			return $this->failed('获取手机号失败.');
+		}
 
-    /**
-     * 此方法只使用与支付时，需要根据 code 换取 openid
-     *
-     * @return \Illuminate\Http\Response|mixed
-     * @throws EasyWeChat\Kernel\Exceptions\InvalidConfigException
-     * @throws Exception
-     */
-    public function getOpenIdByCode()
-    {
-        $miniProgram = $this->getMiniprogramApp();
+		$mobile = $decryptedData['purePhoneNumber'];
 
-        $code = request('code');
+		$isNewUser = false;
 
-        if (empty($code)) {
-            return $this->failed('缺失code');
-        }
+		//3. get or create user.
+		if (!$user = $this->userRepository->getUserByCredentials(['mobile' => $mobile])) {
+			$data      = ['mobile' => $mobile];
+			$user      = $this->userRepository->create($data);
+			$isNewUser = true;
+		}
 
-        $result = $miniProgram->auth->session($code);
+		$token = $user->createToken($user->id)->accessToken;
 
-        if (!isset($result['openid'])) {
-            return $this->failed('获取openid失败.');
-        }
+		$this->userService->bindPlatform($user->id, request('open_id'), $this->getMiniprogramAppId(), 'miniprogram');
 
-        $openid = $result['openid'];
+		event('user.login', [$user, $isNewUser]);
 
-        return $this->success(compact('openid'));
-    }
+		return $this->success(['token_type' => 'Bearer', 'access_token' => $token, 'is_new_user' => $isNewUser]);
+	}
 
+	/**
+	 * 此方法只使用与支付时，需要根据 code 换取 openid
+	 *
+	 * @return \Illuminate\Http\Response|mixed
+	 * @throws EasyWeChat\Kernel\Exceptions\InvalidConfigException
+	 * @throws Exception
+	 */
+	public function getOpenIdByCode()
+	{
+		$miniProgram = $this->getMiniprogramApp();
 
-    /**
-     * @return EasyWeChat\MiniProgram\Application
-     *
-     * @throws Exception
-     */
-    protected function getMiniprogramApp(): EasyWeChat\MiniProgram\Application
-    {
-        $app = request('app') ?? 'default';
+		$code = request('code');
 
-        if (!config('ibrand.wechat.mini_program.' . $app . '.app_id') or !config('ibrand.wechat.mini_program.' . $app . '.secret')) {
-            throw new Exception('please set wechat miniprogram account.');
-        }
+		if (empty($code)) {
+			return $this->failed('缺失code');
+		}
 
-        $options = [
-            'app_id' => config('ibrand.wechat.mini_program.' . $app . '.app_id'),
-            'secret' => config('ibrand.wechat.mini_program.' . $app . '.secret'),
-        ];
+		$result = $miniProgram->auth->session($code);
 
-        $miniProgram = Factory::miniProgram($options);
+		if (!isset($result['openid'])) {
+			return $this->failed('获取openid失败.');
+		}
 
-        return $miniProgram;
-    }
+		$openid = $result['openid'];
 
-    /**
-     * @return \Illuminate\Config\Repository|mixed
-     */
-    protected function getMiniprogramAppId()
-    {
-        $app = request('app') ?? 'default';
+		return $this->success(compact('openid'));
+	}
 
-        return config('ibrand.wechat.mini_program.' . $app . '.app_id');
-    }
+	/**
+	 * @return EasyWeChat\MiniProgram\Application
+	 *
+	 * @throws Exception
+	 */
+	protected function getMiniprogramApp(): EasyWeChat\MiniProgram\Application
+	{
+		$app = request('app') ?? 'default';
+
+		if (!config('ibrand.wechat.mini_program.' . $app . '.app_id') or !config('ibrand.wechat.mini_program.' . $app . '.secret')) {
+			throw new Exception('please set wechat miniprogram account.');
+		}
+
+		$options = [
+			'app_id' => config('ibrand.wechat.mini_program.' . $app . '.app_id'),
+			'secret' => config('ibrand.wechat.mini_program.' . $app . '.secret'),
+		];
+
+		$miniProgram = Factory::miniProgram($options);
+
+		return $miniProgram;
+	}
+
+	/**
+	 * @return \Illuminate\Config\Repository|mixed
+	 */
+	protected function getMiniprogramAppId()
+	{
+		$app = request('app') ?? 'default';
+
+		return config('ibrand.wechat.mini_program.' . $app . '.app_id');
+	}
 }

@@ -17,5 +17,6 @@ Route::post('oauth/official-account/quick-user-login', 'OfficialAccountAuthContr
 Route::post('oauth/official-account/update-user', 'OfficialAccountAuthController@updateUser');
 
 Route::post('oauth/miniprogram/login', 'MiniProgramLoginController@login')->name('api.oauth.miniprogram.login');
+Route::post('oauth/miniprogram/user-login', 'MiniProgramLoginController@userLogin')->name('api.oauth.miniprogram.user.login');
 Route::post('oauth/miniprogram/mobile', 'MiniProgramLoginController@mobileLogin')->name('api.oauth.miniprogram.mobile.login');
 Route::post('oauth/miniprogram/openid', 'MiniProgramLoginController@getOpenIdByCode');
